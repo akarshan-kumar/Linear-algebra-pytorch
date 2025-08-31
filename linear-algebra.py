@@ -1,6 +1,6 @@
 import torch
 from typing import Annotated,Tuple,Union
-from pydantic import BaseModel,validator
+from pydantic import BaseModel,field_validator
 
 def dot_product(
         a:torch.Tensor=torch.tensor([1.0,2.0,3.0]), 
@@ -52,7 +52,7 @@ def point2pointDist(a:torch.Tensor=torch.tensor([1.0,2.0,3.0]),
 def PointTensor(BaseModel):
     point:torch.Tensor
 
-    @validator('point')
+    @field_validator('point')
     def check_shape(cls, v):
         if not isinstance(v, torch.Tensor):
             raise TypeError("Point must be a torch.Tensor")
@@ -64,7 +64,7 @@ def LineTensor(BaseModel):
     point:torch.Tensor
     direction:torch.Tensor
 
-    @validator('point')
+    @field_validator('point')
     def check_point_shape(cls, v):
         if not isinstance(v, torch.Tensor):
             raise TypeError("Point must be a torch.Tensor")
@@ -72,7 +72,7 @@ def LineTensor(BaseModel):
             raise ValueError("Point must be a 1D tensor of shape (3,), e.g., torch.tensor([x,y,z])")
         return v
     
-    @validator('direction')
+    @field_validator('direction')
     def check_direction_shape(cls, v):
         if not isinstance(v, torch.Tensor):
             raise TypeError("Direction must be a torch.Tensor")
@@ -85,7 +85,7 @@ def LineTensor(BaseModel):
 def LineEquation(BaseModel):
     line:torch.Tensor
 
-    @validator('line')
+    @field_validator('line')
     def check_line_shape(cls, v):
         if not isinstance(v, torch.Tensor):
             raise TypeError("Line must be a torch.Tensor")
@@ -110,9 +110,51 @@ def point2lineDist(*args:torch.Tensor)->torch.Tensor:
         denominator = torch.sqrt(a**2 + b**2 + c**2)
         print( numerator / denominator)
 
+def line2lineDist(a0:torch.Tensor=torch.tensor([1.0,2.0,3.0]), 
+                  a_dir:torch.Tensor=torch.tensor([4.0,5.0,6.0]),
+                  b0:torch.Tensor=torch.tensor([7.0,8.0,9.0]),
+                  b_dir:torch.Tensor=torch.tensor([10.0,11.0,12.0]),
+                  ) -> torch.Tensor:
+    n = torch.cross(a_dir, b_dir)   
+    n_norm = torch.norm(n)  
+    if n_norm == 0:
+        denominator = torch.norm(a_dir)
+    else:
+        denominator = n_norm
+    distance = torch.abs(torch.dot(n, b0 - a0)) / denominator
+    print(f'Line to line distance: {distance:.2f}')
+    return distance
 
 
-def PCA(x:torch.Tensor=torch.tensor([[2.5, 2.4],
+def line2planeDist(line_point:torch.Tensor=torch.tensor([1.0,2.0,3.0]), 
+                   line_dir:torch.Tensor=torch.tensor([4.0,5.0,6.0]),
+                   point_on_plane:torch.Tensor=torch.tensor([5.0,8.0,7.0]),
+                   normal_to_plane:torch.Tensor=torch.tensor([5.0,8.0,7.0])
+                   ) -> torch.Tensor:
+    
+    numerator = torch.abs(torch.dot(normal_to_plane, line_point - point_on_plane))
+    denominator = torch.norm(torch.linalg.cross(normal_to_plane, line_dir))
+    distance = numerator / denominator
+    print(f'Line to plane distance: {distance:.2f}')
+    
+    return distance
+
+def plane2planeDist(plane1_point:torch.Tensor=torch.tensor([1.0,2.0,3.0]), 
+                   plane1_normal:torch.Tensor=torch.tensor([4.0,5.0,6.0]),
+                   plane2_point:torch.Tensor=torch.tensor([7.0,8.0,9.0]),
+                   plane2_normal:torch.Tensor=torch.tensor([10.0,11.0,12.0]),
+                   ) -> torch.Tensor:           
+    cross_norm = torch.norm(torch.linalg.cross(plane1_normal, plane2_normal))
+    if cross_norm == 0:         
+        distance = torch.abs(torch.dot(plane1_normal, plane2_point - plane1_point)) / torch.norm(plane1_normal)
+    else:
+        distance = 0.0
+
+    print(f'Plane to plane distance: {distance:.2f}')
+    return distance
+
+
+def PCA_with_eigen_values(x:torch.Tensor=torch.tensor([[2.5, 2.4],
                   [0.5, 0.7],
                   [2.2, 2.9],
                   [1.9, 2.2],
@@ -137,7 +179,25 @@ def PCA(x:torch.Tensor=torch.tensor([[2.5, 2.4],
     print(Z)
     return Z
 
+def PCA_with_SVD(x:torch.Tensor=torch.tensor([[2.5, 2.4],
+                  [0.5, 0.7],
+                  [2.2, 2.9],
+                  [1.9, 2.2],
+                  [3.1, 3.0],
+                  [2.3, 2.7]]))-> torch.Tensor:
+    
+    x_mean = torch.mean(x,dim=0)
+    x_centered = x - x_mean
+    U, S, Vt = torch.linalg.svd(x_centered, full_matrices=False)
+    k = 2
+    W = Vt.T[:, :k]   # top-k right singular vectors
+    Z = torch.matmul(x_centered, W)  # projected data
+
+    print(Z)
+    return Z
+
 if __name__ == '__main__':
-    P = torch.tensor([1.0, 2.0, 3.0])                # point
-    plane = torch.tensor([2.3, 4.5, 5.6, 67.0]) 
-    point2lineDist(P,plane)
+    # P = torch.tensor([1.0, 2.0, 3.0])                # point
+    # plane = torch.tensor([2.3, 4.5, 5.6, 67.0]) 
+    # point2lineDist(P,plane)
+    print(line2planeDist())
